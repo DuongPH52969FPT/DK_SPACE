@@ -1,0 +1,10 @@
+{
+    "customer_email": "duongttph592969@gmail.com",
+    "products": {
+        "title": "Duong",
+        "quantity": 105,
+        "price": "200"
+    },
+    "total_amount": 1000,
+    "created_at": "2025-05-14 11:11:59"
+}
