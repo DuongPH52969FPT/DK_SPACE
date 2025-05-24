@@ -1,0 +1,17 @@
+services:
+  laravel.test:
+    volumes:
+      - './logs:/var/www/html/storage/logs'
+      - './local-scripts:/var/www/html/local-scripts'
+  mysql:
+    volumes:
+      - 'mysql-data:/var/lib/mysql'
+  redis:
+    image: redis:alpine
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+volumes:
+  mysql-data:
