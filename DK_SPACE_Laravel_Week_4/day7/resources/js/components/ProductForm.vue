@@ -92,6 +92,9 @@ async submitForm() {
   try {
     this.error = null;
 
+    // Lấy CSRF cookie
+    await api.get('/sanctum/csrf-cookie');
+
     const formData = new FormData();
     formData.append('name', this.form.name);
     formData.append('description', this.form.description);
@@ -101,7 +104,7 @@ async submitForm() {
     }
 
     if (this.isEdit) {
-      formData.append('_method', 'PUT');
+      formData.append('_method', 'PUT');  // giả PUT
       await api.post(`/products/${this.form.id}`, formData);
     } else {
       await api.post('/products', formData);
@@ -117,6 +120,7 @@ async submitForm() {
     }
   }
 }
+
 ,
   },
 };

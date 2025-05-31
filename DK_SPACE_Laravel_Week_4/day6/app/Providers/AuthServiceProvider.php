@@ -1,30 +1,22 @@
 <?php
 
+// app/Providers/AuthServiceProvider.php
 namespace App\Providers;
 
 use App\Models\Post;
 use App\Policies\PostPolicy;
-use Illuminate\Support\ServiceProvider;
+use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
 {
-    /**
-     * Register services.
-     */
     protected $policies = [
         Post::class => PostPolicy::class,
     ];
 
-    public function register(): void
+    public function boot()
     {
-        //
-    }
+        $this->registerPolicies();
 
-    /**
-     * Bootstrap services.
-     */
-    public function boot(): void
-    {
-        //
+        
     }
 }
