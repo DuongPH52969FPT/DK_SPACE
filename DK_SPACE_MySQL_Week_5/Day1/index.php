@@ -95,9 +95,9 @@ function insertNewCustomer($conn) {
 
     try {
         $conn->exec($sql);
-        echo "<p>✅ Đã thêm khách hàng mới: Pham Thanh.</p><hr>";
+        echo "<p>Đã thêm khách hàng mới: Pham Thanh.</p><hr>";
     } catch (PDOException $e) {
-        echo "❌ Lỗi khi thêm khách hàng: " . $e->getMessage();
+        echo "Lỗi khi thêm khách hàng: " . $e->getMessage();
     }
 }
 
@@ -106,9 +106,9 @@ function updateCustomerEmail($conn) {
 
     try {
         $conn->exec($sql);
-        echo "<p>✅ Đã cập nhật email cho khách hàng có mã là 2.</p><hr>";
+        echo "<p>Đã cập nhật email cho khách hàng có mã là 2.</p><hr>";
     } catch (PDOException $e) {
-        echo "❌ Lỗi khi cập nhật email: " . $e->getMessage();
+        echo "Lỗi khi cập nhật email: " . $e->getMessage();
     }
 }
 
@@ -119,7 +119,7 @@ function deleteOrder($conn) {
         $conn->exec($sql);
         echo "<p>✅ Đã xóa đơn hàng có mã là 103.</p><hr>";
     } catch (PDOException $e) {
-        echo "❌ Lỗi khi xóa đơn hàng: " . $e->getMessage();
+        echo "Lỗi khi xóa đơn hàng: " . $e->getMessage();
     }
 }
 
@@ -129,7 +129,7 @@ function firstTwoCustomers($conn) {
     try {
         $result = $conn->query($sql);
 
-        echo "<h2>📋 2 khách hàng đầu tiên:</h2>";
+        echo "<h2> 2 khách hàng đầu tiên:</h2>";
 
         while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
             echo "<p>";
@@ -140,7 +140,7 @@ function firstTwoCustomers($conn) {
             echo "<hr></p>";
         }
     } catch (PDOException $e) {
-        echo "❌ Lỗi khi truy vấn: " . $e->getMessage();
+        echo " Lỗi khi truy vấn: " . $e->getMessage();
     }
 }
 
@@ -153,7 +153,7 @@ function minMaxOrderValue($conn) {
         echo "<p>Nhỏ nhất: " . number_format($result['min_order'], 0, ',', '.') . " VND<br>";
         echo "Lớn nhất: " . number_format($result['max_order'], 0, ',', '.') . " VND</p><hr>";
     } catch (PDOException $e) {
-        echo "❌ Lỗi khi truy vấn: " . $e->getMessage();
+        echo "Lỗi khi truy vấn: " . $e->getMessage();
     }
 }
 
@@ -218,5 +218,5 @@ function laptopProducts($conn) {
 // echo "Tính tổng số lượng đơn hàng, tổng số tiền đã bán ra và trung bình giá trị một đơn hàng.";
 // orderStats($conn);
 
-// echo "Tìm những sản phẩm có tên bắt đầu bằng chữ “Laptop”.";
-// laptopProducts($conn);
+echo "Tìm những sản phẩm có tên bắt đầu bằng chữ “Laptop”.";
+laptopProducts($conn);
