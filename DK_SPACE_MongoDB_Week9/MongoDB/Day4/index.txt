@@ -1,0 +1,254 @@
+// Tạo thành viên
+db.members.insertOne({
+  "full_name": "Nguyen Van A",
+  "email": "vana@example.com", // Email duy nhất
+  "joined_at": ISODate("2024-01-10T00:00:00Z")
+})
+
+// Tạo lịch sử mượn sách, nhúng thông tin sách vào luôn (embedded)
+db.loans.insertOne({
+  "member_id": ObjectId("686686d7720d494e25748a5f"), // Tham chiếu tới thành viên
+  "borrowed_at": ISODate("2025-07-01T10:00:00Z"),
+  "returned_at": ISODate("2025-07-10T14:00:00Z"),
+  "books": [ // Danh sách sách được nhúng trực tiếp
+    {
+      "title": "MongoDB Essentials",
+      "author": "John Doe",
+      "category": "Database",
+      "borrow_quantity": 1
+    },
+    {
+      "title": "Clean Code",
+      "author": "Robert C. Martin",
+      "category": "Programming",
+      "borrow_quantity": 2
+    }
+  ]
+})
+
+Ưu điểm: Truy vấn nhanh, chỉ cần tìm một tài liệu loans là đủ.
+Nhược điểm: Nếu tên sách hoặc tác giả thay đổi, phải cập nhật ở nhiều nơi.
+
+
+// Tạo sách – mỗi cuốn là một document riêng trong collection books
+db.books.insertOne({
+  "_id": ObjectId("68668704720d494e25748a61"),
+  "title": "MongoDB Essentials",
+  "author": "John Doe",
+  "category": "Database",
+  "stock": 10
+})
+
+db.books.insertOne({
+  "_id": ObjectId("68668704720d494e25748a62"),
+  "title": "Clean Code",
+  "author": "Robert C. Martin",
+  "category": "Programming",
+  "stock": 5
+})
+
+// Tạo thành viên – giống như bên embedded
+db.members.insertOne({
+  "_id": ObjectId("6866870c720d494e25748a63"),
+  "full_name": "Nguyen Van A",
+  "email": "vana@example.com",
+  "joined_at": ISODate("2024-01-10T00:00:00Z")
+})
+
+// Tạo lịch sử mượn – chỉ lưu ID sách thay vì nhúng toàn bộ thông tin sách
+db.loans.insertOne({
+  "member_id": ObjectId("6866870c720d494e25748a63"), // Tham chiếu đến member
+  "borrowed_at": ISODate("2025-07-01T10:00:00Z"),
+  "returned_at": null,
+  "books": [
+    {
+      "book_id": ObjectId("68668704720d494e25748a61"), // Tham chiếu đến sách
+      "borrow_quantity": 1
+    },
+    {
+      "book_id": ObjectId("68668704720d494e25748a62"),
+      "borrow_quantity": 2
+    }
+  ]
+})
+
+
+Ưu điểm: Khi cập nhật tên sách, stock hoặc thể loại → chỉ cần sửa 1 nơi (collection books).
+Nhược điểm: Khi cần hiển thị đầy đủ thông tin sách → phải dùng $lookup để truy vấn thêm.
+
+như là 
+
+db.loans.aggregate([
+  // Join thông tin thành viên
+  {
+    $lookup: {
+      from: "members",
+      localField: "member_id",
+      foreignField: "_id",
+      as: "member_info"
+    }
+  },
+  { $unwind: "$member_info" },
+
+  // Mở rộng từng cuốn sách trong mảng books
+  { $unwind: "$books" },
+
+  // Join thông tin sách từ book_id
+  {
+    $lookup: {
+      from: "books",
+      localField: "books.book_id",
+      foreignField: "_id",
+      as: "book_info"
+    }
+  },
+  { $unwind: "$book_info" },
+
+  // Tạo document mới gọn hơn nếu cần
+  {
+    $project: {
+      _id: 0,
+      member_name: "$member_info.full_name",
+      borrowed_at: 1,
+      book_title: "$book_info.title",
+      borrow_quantity: "$books.borrow_quantity"
+    }
+  }
+])
+
+
+So sánh: Embedded vs Referenced
+
+    Tiêu chí	                    Embedded	                               Referenced
+Hiệu suất truy vấn (Read)         Nhanh hơn (1 document chứa đủ dữ liệu)    Cần $lookup và unwind → chậm hơn
+Tính nhất quán dữ liệu            Dễ trùng lặp (cùng sách lưu nhiều nơi)    Dễ cập nhật vì lưu tập trung 1 chỗ
+Khả năng cập nhật sách            Khó (đổi tên sách phải sửa nhiều loan)    Chỉ sửa ở collection là đủ
+
+Thiết kế mối quan hệ (One-to-One, One-to-Many, Many-to-Many):
+Thiết kế schema thể hiện các mối quan hệ:
+One-to-One: Mỗi thành viên có một thông tin liên hệ (ví dụ: contact: { phone, address } nhúng trong members).
+
+db.members.insertOne({
+  _id: ObjectId("6866870c720d494e25748a61"),
+  full_name: "Nguyen Van A",
+  email: "vana@example.com",
+  joined_at: ISODate("2024-01-10T00:00:00Z"),
+  contact: {
+    phone: "0123456789",
+    address: "123 Lê Lợi, Hà Nội"
+  }
+})
+
+
+One-to-Many: Một thành viên có nhiều giao dịch mượn (liên kết member_id trong loans).
+
+db.loans.insertOne({
+  _id: ObjectId("1111aaaa1111aaaa1111aaaa"),
+  member_id: ObjectId("6866870c720d494e25748a63"),
+  borrowed_at: ISODate("2025-07-01T10:00:00Z"),
+  returned_at: null,
+  books: [
+    {
+      book_id: ObjectId("68668704720d494e25748a61"),
+      borrow_quantity: 1
+    },
+    {
+      book_id: ObjectId("68668704720d494e25748a62"),
+      borrow_quantity: 2
+    }
+  ]
+})
+
+
+Many-to-Many: Một thành viên có thể mượn nhiều sách, một sách có thể được mượn bởi nhiều thành viên (sử dụng loans làm collection trung gian).
+
+db.books.insertMany([
+  {
+    title: "MongoDB Essentials",
+    author: "John Doe",
+    category: "Database",
+    stock: 10
+  },
+  {
+    title: "Clean Code",
+    author: "Robert C. Martin",
+    category: "Programming",
+    stock: 5
+  }
+])
+
+
+Viết truy vấn để lấy danh sách sách mà một thành viên đã mượn (ghép loans và books).
+
+
+db.loans.aggregate([
+  // 1. Lọc theo thành viên cần lấy
+  {
+    $match: {
+      member_id: ObjectId("6866870c720d494e25748a63")
+    }
+  },
+
+  // 2. Mở rộng mảng books
+  { $unwind: "$books" },
+
+  // 3. Join với collection books để lấy thông tin chi tiết
+  {
+    $lookup: {
+      from: "books",
+      localField: "books.book_id",
+      foreignField: "_id",
+      as: "book_info"
+    }
+  },
+  { $unwind: "$book_info" },
+
+  // 4. Chỉ lấy thông tin cần
+  {
+    $project: {
+      _id: 0,
+      book_id: "$books.book_id",
+      title: "$book_info.title",
+      borrowed_at: 1,
+      borrow_quantity: "$books.borrow_quantity"
+    }
+  }
+])
+
+Sử dụng DBRef:
+Viết schema cho loans sử dụng DBRef để tham chiếu đến members và books:
+
+
+db.loans.insertOne({
+  loan_id: UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+  member: {
+    $ref: "members",
+    $id: UUID("550e8400-e29b-41d4-a716-446655440000")
+  },
+  book: {
+    $ref: "books",
+    $id: UUID("7ca7b810-9dad-11d1-80b4-00c04fd430c8")
+  },
+  borrow_date: ISODate("2024-04-01T00:00:00Z")
+})
+
+
+Truy vấn DBRef – Lấy thông tin thành viên và sách từ một loan
+
+1.Lấy loan
+const loan = db.loans.findOne({
+  loan_id: UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+})
+Lấy thành viên từ members bằng $id
+
+const member = db.members.findOne({
+  _id: new UUID("550e8400-e29b-41d4-a716-446655440000")
+});
+
+Lấy sách từ books
+
+const book = db.books.findOne({
+  _id: loan.book.$id
+})
+
+

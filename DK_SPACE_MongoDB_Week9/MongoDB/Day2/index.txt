@@ -1,0 +1,126 @@
+# Quản lý thư viện với truy vấn nâng cao MongoDB
+Tạo database có tên là library
+
+use library
+
+tạo collection: members và loán có dữ liệu
+
+db.members.insertOne({
+  member_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  full_name: "Nguyen Thi B",
+  email: "nguyenb@example.com",
+  contact: { phone: "0987654321", city: "Ho Chi Minh City" },
+  interests: ["Fiction", "Science", "History"],
+  joined_at: ISODate("2024-03-15T00:00:00Z")
+})
+
+db.loans.insertOne({
+  loan_id: UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+  member_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  books: [
+    { book_id: UUID("7ca7b810-9dad-11d1-80b4-00c04fd430c8"), title: "Dune", borrow_date: ISODate("2024-04-01T00:00:00Z") },
+    { book_id: UUID("8da7b810-9dad-11d1-80b4-00c04fd430c8"), title: "1984", borrow_date: ISODate("2024-04-01T00:00:00Z") }
+  ],
+  status: "ACTIVE",
+  due_date: ISODate("2024-04-15T00:00:00Z")
+})
+
+
+1.Sử dụng Logical Operators ($and, $or, $not, $nor):
+Viết truy vấn sử dụng $and để tìm các thành viên (members) có city là "Ho Chi Minh City" và interests chứa "Fiction".
+
+db.members.find({$and:[{ "contact.city": "Ho Chi Minh City" },{interests: "Fiction"}]})
+
+Viết truy vấn sử dụng $or để tìm các thành viên có joined_at trước 1/1/2024 hoặc email chứa "example.com".
+
+db.members.find({
+    $or:[
+        {joined_at:{$lt: ISODate('2024-01-01T00:00:00.000Z')}},
+        {email: {$regex: "example\\.com$"}}
+    ]
+})
+
+
+
+Viết truy vấn sử dụng $not để tìm các giao dịch mượn (loans) không có status là "ACTIVE".
+
+db.loans.find({
+  status: { $not: { $eq: "ACTIVE" } }
+})
+
+Viết truy vấn sử dụng $nor để tìm các thành viên không có interests là "Science" và không ở "Hanoi". 
+//$nor -> both needs to be false
+
+db.members.find({
+    $nor:[
+        {interests:"Science"},
+        {"contact.city":"Hanoi"}
+    ]
+})
+2.Sử dụng Element Operators ($exists, $type):
+Viết truy vấn sử dụng $exists để tìm các thành viên có trường contact.phone.
+db.members.find({"contact.phone" : {$exists : true}})
+
+
+Viết truy vấn sử dụng $type để tìm các giao dịch mượn (loans) có due_date thuộc kiểu date.
+
+db.loans.find({"due_date": {"$type" : "date"}})
+
+
+3.Sử dụng Array Operators ($in, $nin, $all):
+Viết truy vấn sử dụng $in để tìm các thành viên có interests chứa bất kỳ giá trị nào trong ["Fiction", "History"].
+
+db.members.find({interests: {$in: ["Fiction", "History"]}}) 
+Chỉ cần một giá trị khớp trong danh sách
+
+Viết truy vấn sử dụng $nin để tìm các thành viên không có interests chứa "Science" hoặc "Technology".
+
+db.members.find({interests: {$nin: ["Science", "Technology"]}})
+
+Viết truy vấn sử dụng $all để tìm các thành viên có interests chứa cả "Fiction" và "History".
+db.members.find({interests: {$all : ["Fiction", "History"]}})
+
+4. Sắp xếp với sort():
+Viết truy vấn để lấy danh sách thành viên, sắp xếp theo joined_at giảm dần (-1).
+
+db.members.find().sort({joined_at: -1})
+
+Viết truy vấn để lấy danh sách giao dịch mượn, sắp xếp theo due_date tăng dần (1) và member_id giảm dần.
+
+db.loans.find().sort({due_date: 1, member_id: -1})
+
+
+5.Phân trang với limit() và skip():
+Viết truy vấn để lấy 10 thành viên đầu tiên, bỏ qua 20 bản ghi đầu (skip(20).limit(10)), sắp xếp theo full_name tăng dần.
+
+db.members.find().sort({full_name: 1}).skip(20).limit(10)
+Viết truy vấn để lấy 5 giao dịch mượn từ bản ghi thứ 11, sắp xếp theo due_date giảm dần.
+
+
+6.Projection: Lựa chọn trường trả về:
+Viết truy vấn để lấy danh sách thành viên, chỉ trả về full_name và email, loại bỏ _id.
+
+db.members.find({},{_id:false,full_name:true,email:true})
+
+Viết truy vấn để lấy danh sách giao dịch mượn, chỉ trả về member_id, status, và books.title.
+
+db.loans.find({},{member_id:true,status:true,"books.title":true})
+
+7.Truy vấn Embedded Documents:
+Viết truy vấn để tìm các thành viên có contact.city là "Hanoi".
+db.members.find({"contact.city" : "Hanoi"})
+
+Viết truy vấn để tìm các giao dịch mượn có ít nhất một cuốn sách trong books với borrow_date sau 1/4/2024.
+
+db.loans.find({"books.borrow_date": {$gt: ISODate("2024-04-01T00:00:00Z")}})
+
+8.Truy vấn Arrays:
+Viết truy vấn để tìm các thành viên có đúng 3 giá trị trong mảng interests (sử dụng $size).
+
+db.members.find({interests:{$size: 3}})
+
+Viết truy vấn để tìm các giao dịch mượn có books chứa cuốn sách với title là "Dune".
+
+db.loans.find({"books.title" : "Dune"})
+
+

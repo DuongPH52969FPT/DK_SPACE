@@ -1,0 +1,217 @@
+// === BẮT ĐẦU CÀI ĐẶT DATABASE ===
+use day3lib
+
+// Tạo các collection chính
+db.createCollection("members")
+db.createCollection("loans")
+db.createCollection("audit_logs")
+
+// === BƯỚC 1: THÊM DỮ LIỆU MẪU ===
+
+// Thêm dữ liệu cho members
+db.members.insertOne({
+  member_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  full_name: "Nguyen Thi B",
+  email: "nguyenb@example.com",
+  joined_at: ISODate("2024-03-15T00:00:00Z")
+})
+
+// Thêm dữ liệu cho loans
+db.loans.insertOne({
+  loan_id: UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+  member_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  book_id: UUID("7ca7b810-9dad-11d1-80b4-00c04fd430c8"),
+  book_title: "Dune",
+  borrow_date: ISODate("2024-04-01T00:00:00Z"),
+  due_date: ISODate("2024-04-15T00:00:00Z")
+})
+
+// Thêm dữ liệu cho audit_logs
+db.audit_logs.insertOne({
+  log_id: UUID("8da7b810-9dad-11d1-80b4-00c04fd430c8"),
+  action: "BORROW",
+  member_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  created_at: ISODate("2024-04-01T00:00:00Z")
+})
+
+
+// === BƯỚC 2: TẠO VÀ QUẢN LÝ INDEXES ===
+
+// 1) Tạo index trên email để tối ưu tìm kiếm
+db.members.createIndex({ email: 1 })
+
+// 2) Tạo compound index tối ưu truy vấn theo member_id và borrow_date
+db.loans.createIndex({ member_id: 1, borrow_date: 1 })
+
+// 3) Xoá index email
+db.members.dropIndex("email_1")
+
+// 4) Dùng explain kiểm tra hiệu quả index
+db.loans.find({
+  member_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  borrow_date: ISODate("2024-04-01T00:00:00Z")
+}).explain()
+
+
+// === BƯỚC 3: TẠO TEXT INDEX ===
+
+// Tạo text index trên book_title để tìm kiếm văn bản
+db.loans.createIndex({ book_title: "text" })
+
+// Truy vấn tìm sách chứa từ "Dune"
+db.loans.find({ $text: { $search: "Dune" } })
+
+// Truy vấn tìm sách chứa "Science Fiction"
+db.loans.find({ $text: { $search: "Science Fiction" } })
+
+// Ghi chú:
+// - Tìm kiếm bằng index nhanh hơn nhiều so với $regex
+// - Hỗ trợ ngôn ngữ tự nhiên, ví dụ tìm "run" có thể ra cả "running"
+
+
+// === BƯỚC 4: TẠO UNIQUE INDEX ===
+
+// Tạo unique index trên email để tránh trùng email
+db.members.createIndex({ email: 1 }, { unique: 1 })
+
+// Thử chèn email trùng để kiểm tra lỗi
+db.members.insertOne({
+  member_id: UUID("550e8400-e29b-41d4-a716-446655441111"),
+  full_name: "Nguyen Thi C",
+  email: "nguyenb@example.com", // email đã có
+  joined_at: ISODate("2024-04-15T00:00:00Z")
+})
+
+// Ghi chú: Unique Index giúp đảm bảo tính toàn vẹn dữ liệu – không trùng email, book_id, loan_id
+
+
+// === BƯỚC 5: TẠO TTL INDEX ===
+
+// Tạo TTL index trên trường created_at, tự động xoá sau 30 ngày
+db.audit_logs.createIndex({ created_at: 1 }, { expireAfterSeconds: 2592000 })
+
+// Thêm dữ liệu vào audit_logs với thời gian hiện tại
+db.audit_logs.insertOne({
+  log_id: UUID("8da7b810-9dad-11d1-80b4-00c04fd430d9"),
+  action: "BORROW",
+  member_id: UUID("550e8400-e29b-41d4-a716-446655441111"),
+  created_at: ISODate()
+})
+
+// Ghi chú: TTL Index giúp quản lý log tự động, tiết kiệm dung lượng lưu trữ
+
+
+// === BƯỚC 6: SỬ DỤNG CAPPED COLLECTIONS ===
+
+// Tạo collection giới hạn dung lượng 1MB, tối đa 10 thông báo
+db.createCollection("system_notifications", {
+  capped: true,
+  size: 1048576,
+  max: 10
+})
+
+// Thêm 1 thông báo mới
+db.system_notifications.insertOne({
+  notification_id: UUID("8da7b810-9dad-11d1-80b4-00c04fd435a1"),
+  message: "Thong bao",
+  created_at: ISODate()
+})
+
+// Ghi chú: Capped Collection hoạt động như buffer vòng lặp, tự động xoá bản ghi cũ nhất khi đầy
+
+
+// === BƯỚC 7: BULK WRITE OPERATIONS ===
+
+// 1) Bulk ghi vào members: thêm và cập nhật
+db.members.bulkWrite([
+  {
+    insertOne: {
+      document: {
+        member_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+        full_name: "Nguyen Thi D",
+        email: "nguyenC@example.com",
+        joined_at: ISODate()
+      }
+    }
+  },
+  {
+    updateOne: {
+      filter: { email: "nguyenb@example.com" },
+      update: { $set: { full_name: "Nguyen Thi B" } }
+    }
+  }
+])
+
+// 2) Bulk ghi vào loans: xoá 1, thêm 2
+db.loans.bulkWrite([
+  {
+    deleteOne: {
+      filter: {
+        loan_id: UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+      }
+    }
+  },
+  {
+    insertOne: {
+      document: {
+        loan_id: UUID("6ba7b810-9dad-11d1-80b4-00c04fd430j4"),
+        member_id: UUID("550e8400-e29b-41d4-a716-446655442222"),
+        book_id: UUID("7ca7b810-9dad-11d1-80b4-00c04fd430c1"),
+        book_title: "Section B",
+        borrow_date: ISODate(),
+        due_date: ISODate("2024-07-15T00:00:00.000Z")
+      }
+    }
+  },
+  {
+    insertOne: {
+      document: {
+        loan_id: UUID("6ba7b810-9dad-11d1-80b4-00c04fd430d1"),
+        member_id: UUID("550e8400-e29b-41d4-a716-446655443333"),
+        book_id: UUID("7ca7b810-9dad-11d1-80b4-00c04fd430c9"),
+        book_title: "Science",
+        borrow_date: ISODate(),
+        due_date: ISODate("2024-05-15T00:00:00.000Z")
+      }
+    }
+  }
+])
+
+
+// === BƯỚC 8: KIỂM TRA VÀ TỐI ƯU HÓA ===
+
+// Liệt kê tất cả index trong loans
+db.loans.getIndexes()
+
+// So sánh hiệu suất truy vấn trước và sau khi có index
+
+// Xoá compound index (nếu có)
+db.loans.dropIndex("member_id_1_borrow_date_1")
+
+// Chạy truy vấn với explain để xem hiệu suất khi chưa có index
+db.loans.find({
+  member_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  borrow_date: { $gte: ISODate("2024-01-01") }
+}).explain("executionStats")
+
+// Tạo lại compound index
+db.loans.createIndex({ member_id: 1, borrow_date: 1 })
+
+// Chạy lại truy vấn với explain để so sánh sau khi có index
+db.loans.find({
+  member_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  borrow_date: { $gte: ISODate("2024-01-01") }
+}).explain("executionStats")
+
+
+// === GIÁM SÁT INDEX BẰNG collStats ===
+
+// Kiểm tra thống kê chỉ mục trong members
+db.runCommand({ collStats: "members" })
+
+// Các trường nên quan tâm:
+// - totalIndexSize: tổng kích thước index (bytes)
+// - indexSizes: kích thước từng index
+// - nindexes: số lượng index
+
+// Gợi ý: Giám sát thường xuyên để tránh lãng phí tài nguyên, giữ hệ thống hiệu quả
