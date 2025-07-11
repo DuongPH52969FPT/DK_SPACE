@@ -1,0 +1,155 @@
+db.patients.insertOne({
+  patient_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  full_name: "Nguyen Van A",
+  email: "nguyen@example.com",
+  phone: "0123456789",
+  registered_at: ISODate("2024-01-15T00:00:00Z")
+})
+
+db.appointments.insertOne({
+  appointment_id: UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+  patient_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  doctor_id: UUID("7ca7b810-9dad-11d1-80b4-00c04fd430c8"),
+  appointment_date: ISODate("2024-06-01T09:00:00Z"),
+  status: "SCHEDULED",
+  diagnosis: "Routine Checkup"
+})
+
+db.medical_records.insertOne({
+  record_id: UUID("8da7b810-9dad-11d1-80b4-00c04fd430c8"),
+  patient_id: UUID("550e8400-e29b-41d4-a716-446655440000"),
+  visit_date: ISODate("2024-06-01T10:00:00Z"),
+  symptoms: ["fever", "cough"],
+  prescription: "Paracetamol 500mg",
+  notes: "Follow-up in 7 days"
+})
+
+
+1.Thiết kế lệnh reIndex để tái tạo chỉ mục trên 
+collection appointments nhằm giảm phân mảnh sau khi có nhiều thao tác cập nhật/xóa.
+
+db.appointments.createIndex({
+  appointment_id :1, patient_id : 1
+})
+
+db.appointments.getIndexes()
+
+db.appointments.reIndex()
+
+db.appointments.getIndexes()
+
+db.appointments.stats()
+
+
+Thiết kế quy trình sử dụng compact để thu gọn collection medical_records
+ nhằm giảm dung lượng lưu trữ.
+db.runCommand({ collStats: "medical_records" })
+
+db.runCommand({ compact: "medical_records" })
+
+
+Mô tả cách giám sát kích thước chỉ mục (sử dụng collStats) và xác định khi nào cần rebuild hoặc compact.
+
+
+Xác định khi nào cần compact hoặc reIndex
+
+Tiêu chí  	                       Cách tính toán	                                   Ngưỡng cảnh báo
+Phân mảnh dữ liệu	                 storageSize / size	                                   > 1.5
+Nhiều thao tác xóa/update	Quan sát lượng dữ liệu bị delete hoặc update             	Nếu tăng mạnh
+
+
+Compression (zlib, snappy):
+Thiết kế cấu hình collection medical_records với zlib compression để giảm dung lượng lưu trữ cho dữ liệu văn bản lớn (như notes).
+Thiết kế collection appointments với snappy compression để ưu tiên tốc độ truy cập cho các truy vấn thường xuyên.
+So sánh zlib (tỷ lệ nén cao, CPU cao) và snappy (nén nhanh, CPU thấp) trong bối cảnh hệ thống phòng khám.
+
+ Thiết kế medical_records với zlib compression
+
+ db.createCollection("medical_records", {
+  storageEngine: {
+    wiredTiger: {
+      configString: "block_compressor=zlib"
+    }
+  }
+})
+
+MongoDB sẽ sử dụng Zlib để nén dữ liệu trong collection này.
+zlib -> là một thuật toán nén được tích hợp sẵn bên trong MongoDB,
+ thông qua storage engine WiredTiger.
+
+    Ưu điểm:
+
+        Tỷ lệ nén cao hơn → tiết kiệm dung lượng đĩa đáng kể.
+
+        Thích hợp cho dữ liệu ít truy cập lại, nhưng chiếm nhiều không gian (văn bản dài).
+
+    Nhược điểm:
+
+        Tốn CPU hơn khi đọc/ghi vì quá trình nén/giải nén nặng hơn.
+
+
+Thiết kế appointments với snappy compression
+Snappy là một thuật toán nén dữ liệu tốc độ cao được phát triển bởi Google, và được tích hợp sẵn trong MongoDB (thông qua storage engine WiredTiger)
+để nén các block dữ liệu của collection.
+Dữ liệu được truy vấn thường xuyên theo ngày, bác sĩ, bệnh nhân.
+
+db.createCollection("appointments", {
+  storageEngine: {
+    wiredTiger: {
+      configString: "block_compressor=snappy"
+    }
+  }
+})
+
+
+Ưu điểm:
+
+    Giải nén siêu nhanh → tăng tốc độ đọc truy vấn.
+
+    Phù hợp cho các collection có tần suất truy cập cao như lịch hẹn.
+
+Nhược điểm:
+
+    Tỷ lệ nén thấp hơn so với zlib.
+
+
+    Áp dụng thực tế trong hệ thống phòng khám
+Collection		           Mục tiêu chính
+medical_records	 zlib	   Giảm dung lượng lưu trữ lâu dài
+appointments	   snappy	   Truy vấn nhanh hàng ngày
+
+Bulk Operations for Performance:
+Thiết kế bulkWrite để xử lý nhiều thao tác cùng lúc:
+Thêm 100 bệnh nhân mới vào patients.
+Cập nhật trạng thái status của 50 lịch hẹn từ "SCHEDULED" thành "COMPLETED".
+Thêm 200 bản ghi y tế mới vào medical_records.
+Mô tả lợi ích của bulk operations trong việc giảm thời gian xử lý và chi phí I/O so với thao tác đơn lẻ.
+Thiết kế lệnh bulkWrite với tùy chọn ordered: false để tối ưu hiệu suất.
+
+
+const newPatients = Array.from({ length: 100 }, (_, i) => ({
+  insertOne: {
+    document: {
+      name: `Patient ${i + 1}`,
+      gender: i % 2 === 0 ? "male" : "female",
+      birth_date: new Date(1980 + (i % 40), 0, 1),
+      created_at: new Date()
+    }
+  }
+}));
+
+db.patients.bulkWrite(newPatients, { ordered: false });
+
+
+const newRecords = Array.from({ length: 200 }, (_, i) => ({
+  insertOne: {
+    document: {
+      patient_id: ObjectId(),  // giả định bạn tạo dummy ID
+      doctor_id: ObjectId(),
+      notes: `Medical note #${i + 1}`,
+      created_at: new Date()
+    }
+  }
+}));
+
+db.medical_records.bulkWrite(newRecords, { ordered: false });

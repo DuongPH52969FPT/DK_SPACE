@@ -1,0 +1,230 @@
+1.Query Optimization với explain():
+Thiết kế truy vấn để lấy danh sách đặt giá (bids) cho một phiên đấu giá cụ thể (auction_id)
+trong khoảng thời gian từ 10:00 đến 12:00 ngày 1/6/2024.
+Sử dụng explain("executionStats") để phân tích kế hoạch truy vấn,
+xác định các giai đoạn như COLLSCAN hoặc IXSCAN.
+Đề xuất cải tiến nếu truy vấn chậm (ví dụ: thêm index trên auction_id và bid_time).
+
+db.bids.find(
+    {
+        auction_id: ObjectId("686e34b29f209e918b748a61"),
+        bid_time : {
+        $gte : ISODate('2024-06-01T10:00:00.000Z'),
+        $lt:ISODate('2024-06-01T12:00:00.000Z')
+        }
+    }
+).explain("executionStats")
+
+db.bids.createIndex({auction_id : 1, bid_time : 1})
+
+db.bids.dropIndex("bid_time_1");
+
+
+2.Index Optimization với Covered Queries:
+Thiết kế compound index trên bids (ví dụ: { auction_id: 1, bid_time: 1, status: 1 })
+ để hỗ trợ truy vấn lấy auction_id, bid_time, và status.
+
+db.bids.createIndex({
+    auction_id: 1, bid_time : 1, status : 1
+})
+để truy cập mình sẽ sử dụng
+
+db.bids.find(
+    {
+        auction_id: ObjectId("686e34b29f209e918b748a61"),
+        bid_time : {
+        $gte : ISODate('2024-06-01T10:00:00.000Z'),
+        $lt:ISODate('2024-06-01T12:00:00.000Z')
+        },
+        status : "ACCEPTED"
+    },
+    {
+    _id: 0,
+    auction_id: 1,
+    bid_time: 1,
+    status: 1
+    }
+).explain("executionStats")
+Thiết kế truy vấn covered query chỉ trả về các trường trong index để tránh truy cập dữ liệu gốc.
+Mô tả lợi ích của covered queries trong việc giảm thời gian xử lý các truy vấn lịch sử đặt giá.
+
+Covered Query là truy vấn mà MongoDB có thể trả về kết quả
+chỉ bằng cách đọc index, mà không cần truy cập vào document trong collection.
+
+    Điều này giúp:
+
+    Tăng tốc truy vấn đáng kể, đặc biệt với truy vấn lịch sử đặt giá (historical bids) chứa hàng triệu dòng
+
+    Giảm I/O và memory usage, vì không cần truy cập dữ liệu thô trên disk
+
+3.Tránh Over-Indexing:
+Phân tích kịch bản tạo quá nhiều index trên bids (ví dụ: index riêng cho auction_id, bidder_id, bid_time, và nhiều compound index).
+Đề xuất chiến lược giảm số lượng index (ví dụ: hợp nhất thành compound index phù hợp với mẫu truy vấn phổ biến).
+Mô tả tác động của over-indexing (ví dụ: tăng chi phí ghi khi người dùng đặt giá liên tục).
+Kịch bản tạo quá nhiều index trên bids
+
+{ auction_id: 1 }
+{ bidder_id: 1 }
+{ bid_time: 1 }
+{ status: 1 }
+
+// Index phức hợp
+{ auction_id: 1, bid_time: 1 }
+{ auction_id: 1, bidder_id: 1 }
+{ bidder_id: 1, bid_time: 1 }
+{ auction_id: 1, bid_time: 1, status: 1 }
+
+Tác động tiêu cực của Over-Indexing
+
+Tốn RAM & ổ cứng
+
+Khó quản lý & bảo trì -> Càng nhiều index → càng khó hiểu truy vấn nào dùng index nào
+
+Tối ưu hoá index bằng compound index thông minh
+
+Truy vấn chính  	{ auction_id: 1, bid_time: 1, status: 1 }
+
+Truy vấn theo user	{ bidder_id: 1, bid_time: -1 } (lấy lịch sử theo thời gian giảm dần) 
+
+
+4.Sharding: Shard Key và Shard Distribution:
+
+Shard key là 1 hoặc nhiều field trong document mà MongoDB dùng để phân chia dữ liệu ra nhiều shard
+
+
+Chọn Shard Key phù hợp
+
+Giả sử collection bids lưu dữ liệu đặt giá của người dùng:
+
+{
+  _id: ObjectId("..."),
+  auction_id: ObjectId("..."),
+  bidder_id: ObjectId("..."),
+  bid_time: ISODate("2024-06-01T10:00:00Z"),
+  amount: 100,
+  status: "ACCEPTED"
+}
+
+Ưu điểm:
+
+    Truy vấn theo auction_id sẽ định tuyến trực tiếp đến 1 shard
+
+    Dễ nhóm dữ liệu theo phiên đấu giá
+
+Nhược điểm:
+
+    Nếu có 1 phiên đấu giá hot → tất cả truy vấn & ghi đổ dồn vào 1 shard → gây hotspot
+
+b.Shard Key: bid_time
+
+Phù hợp nếu:
+
+    Dùng cho báo cáo, thống kê theo thời gian:
+
+    db.bids.find({
+      bid_time: {
+        $gte: ISODate("2024-06-01T00:00:00Z"),
+        $lt: ISODate("2024-06-01T23:59:59Z")
+      }
+    })
+
+Nhược điểm:
+
+    bid_time tăng dần theo thời gian → các ghi mới sẽ dồn vào 1 shard → gây hot partition
+
+Giải pháp: Hashed Shard Key
+
+ Dùng shard key auction_id nhưng ở dạng hashed:
+
+db.bids.createIndex({ auction_id: "hashed" })
+sh.shardCollection("auctionDB.bids", { auction_id: "hashed" })
+
+
+
+MongoDB Read Preference: nearest & primaryPreferred
+1. ✅ Giới thiệu Read Preference
+
+    Read Preference là cách bạn chỉ định MongoDB nên đọc dữ liệu từ node nào trong replica set.
+
+Loại Read Preference	Mục tiêu chính
+primary (default)	Đảm bảo dữ liệu mới nhất (chỉ đọc từ primary)
+primaryPreferred	Ưu tiên dữ liệu mới nhất, fallback nếu cần
+secondary	Giảm tải cho primary
+secondaryPreferred	Ưu tiên đọc nhẹ, chấp nhận dữ liệu cũ hơn
+nearest	Đọc từ node có độ trễ mạng thấp nhất
+
+
+2Truy vấn dùng readPreference: "nearest" – tối ưu theo vùng địa lý
+
+Trường hợp dùng "nearest" phù hợp:
+Trường hợp	Lý do chọn nearest
+Người dùng trải rộng toàn cầu	Giảm độ trễ mạng
+Truy vấn không cần dữ liệu mới tức thì	Có thể đọc từ secondary
+Trang chủ hiển thị phiên đấu giá đang mở	Cập nhật mỗi vài giây là đủ
+
+3Truy vấn dùng readPreference: "primaryPreferred" – ưu tiên dữ liệu mới nhất
+
+Trường hợp dùng "primaryPreferred" phù hợp:
+Trường hợp	Lý do chọn primaryPreferred
+Truy vấn lịch sử đặt giá	Ưu tiên tính chính xác dữ liệu
+Hiển thị số lượng bid mới nhất	Ghi gần như realtime
+Primary bị lỗi ngắn hạn vẫn đọc được	Fallback sang secondary
+
+
+7.Aggregation Optimization với Early Filtering:
+Thiết kế pipeline aggregation để tính tổng số tiền đặt giá (bid_amount) theo auction_id:
+Sử dụng $match ngay đầu pipeline để lọc bids có ăn status: "ACCEPTED" và bid_time trong ngày 1/6/2024.
+Sử dụng $group để tính tổng bid_amount theo auction_id.
+Sử dụng $sort để sắp xếp theo tổng số tiền giảm dần.
+Mô tả lợi ích của early filtering (đặt $match sớm) trong việc giảm dữ liệu xử lý.
+Sử dụng explain() để kiểm tra hiệu suất pipeline và đề xuất cải tiến (ví dụ: thêm index hỗ trợ $match).
+
+db.bids.aggregate([
+  {
+    $match: {
+      status: "ACCEPTED",
+      bid_time: {
+        $gte: ISODate("2024-06-01T00:00:00Z"),
+        $lt: ISODate("2024-06-02T00:00:00Z")
+      }
+    }
+  },
+  {
+    $group: {
+      _id: "$auction_id",
+      total_amount: { $sum: "$bid_amount" }
+    }
+  },
+  {
+    $sort: { total_amount: -1 }
+  }
+])
+
+sử dụng explain
+
+db.bids.aggregate([
+  {
+    $match: {
+      status: "ACCEPTED",
+      bid_time: {
+        $gte: ISODate("2024-06-01T00:00:00Z"),
+        $lt: ISODate("2024-06-02T00:00:00Z")
+      }
+    }
+  },
+  {
+    $group: {
+      _id: "$auction_id",
+      total_amount: { $sum: "$bid_amount" }
+    }
+  },
+  {
+    $sort: { total_amount: -1 }
+  }
+], { explain: true })
+
+
+cải thiện - > db.bids.createIndex({ status: 1, bid_time: 1 })
+
+Kiểm tra và giám sát:
+Thiết kế quy trình sử dụng collStats để kiểm tra kích thước collection và index trong bids.

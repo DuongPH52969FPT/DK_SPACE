@@ -1,0 +1,28 @@
+1. MongoDB Atlas (Cloud Setup)
+
+MongoDB Atlas là nền tảng triển khai MongoDB trên đám mây (AWS/GCP/Azure), có sẵn các tính năng như backup, scale, monitoring.
+ Ứng dụng thực tế: Startup triển khai MongoDB chỉ trong vài phút mà không cần quản trị server.
+2. Sharded Cluster
+
+Kiến trúc phân mảnh dữ liệu (sharding), giúp tăng khả năng xử lý khối lượng lớn dữ liệu bằng cách chia nhỏ và phân phối lên nhiều node.
+ Ứng dụng thực tế: Phân mảnh collection sản phẩm theo category_id để tăng tốc truy vấn.
+3. High Availability – Replica Sets & Failover
+
+Replica set gồm 1 primary và nhiều secondary đảm bảo dữ liệu luôn sẵn sàng và tự động failover khi node chính gặp sự cố.
+ Ứng dụng thực tế: Hệ thống ngân hàng không bị gián đoạn khi một node bị lỗi.
+4. Configuration – maxConnections, oplogSize
+
+Cho phép cấu hình số kết nối tối đa và kích thước oplog (log thay đổi), hỗ trợ tối ưu hiệu suất và hoạt động nhân bản dữ liệu.
+ Ứng dụng thực tế: Tăng maxConnections lên 10,000 cho hệ thống học trực tuyến phục vụ hàng nghìn người dùng.
+5. Security – Authentication & Authorization
+
+Cung cấp xác thực người dùng (authentication) và phân quyền truy cập (authorization) để đảm bảo an toàn dữ liệu.
+ Ứng dụng thực tế: Tài khoản “analytics” chỉ có quyền đọc dữ liệu inventory.
+6. Backup and Restore
+
+Cung cấp các công cụ sao lưu và khôi phục dữ liệu thủ công hoặc tự động, bảo vệ dữ liệu trước rủi ro.
+ Ứng dụng thực tế: Backup database hàng ngày bằng mongodump và khôi phục khi lỗi hệ thống.
+7. MongoDB Drivers – Node.js
+
+Cung cấp thư viện chính thức để tương tác với MongoDB từ ứng dụng Node.js, hỗ trợ async/await, transaction,...
+ Ứng dụng thực tế: App Node.js kết nối và truy vấn MongoDB để lấy sản phẩm hiển thị cho người dùng.

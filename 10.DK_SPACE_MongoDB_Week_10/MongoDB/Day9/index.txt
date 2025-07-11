@@ -1,0 +1,142 @@
+1. Geospatial Queries: $geoWithin, $near
+MongoDB hỗ trợ dữ liệu địa lý 2D và 2D sphere để lưu trữ tọa độ (vị trí). 
+
+có thể tìm các đối tượng gần một điểm ($near) hoặc nằm trong một vùng nhất định ($geoWithin).
+
+Ví dụ 
+Tìm các cửa hàng gần vị trí người dùng (dùng $near):
+
+db.stores.find({
+  location: {
+    $near: {
+      $geometry: {
+        type: "Point",
+        coordinates: [106.7009, 10.7769] // Ho Chi Minh City
+      },
+      $maxDistance: 5000 // 5km
+    }
+  }
+})
+
+
+GridFS – Lưu trữ file lớn
+Dùng để lưu trữ file >16MB (giới hạn document MongoDB).
+GridFS chia file thành các chunk nhỏ và lưu vào 2 collection (fs.files và fs.chunks).
+
+Ví dụ 
+Lưu trữ video bài giảng e-learning:
+
+
+const bucket = new mongoose.mongo.GridFSBucket(conn.db, {
+  bucketName: "videos"
+});
+fs.createReadStream("./lecture1.mp4").pipe(bucket.openUploadStream("lecture1.mp4"));
+
+
+Aggregation Framework: $lookup, $graphLookup
+
+$lookup: "join" giữa các collection.
+
+$graphLookup: truy vấn đệ quy, tìm theo mối quan hệ nhiều cấp.
+
+$lookup – lấy đơn hàng kèm thông tin user:
+db.orders.aggregate([
+  {
+    $lookup: {
+      from: "users",
+      localField: "user_id",
+      foreignField: "_id",
+      as: "user_info"
+    }
+  }
+])
+
+
+$graphLookup – cây phân cấp danh mục:
+db.categories.aggregate([
+  {
+    $graphLookup: {
+      from: "categories",
+      startWith: "$_id",
+      connectFromField: "_id",
+      connectToField: "parent_id",
+      as: "sub_categories"
+    }
+  }
+])
+
+
+Time Series Collections
+MongoDB hỗ trợ time-series collection tối ưu cho dữ liệu
+ thời gian (IoT, logs, metrics), tự động nén và lưu trữ hiệu quả.
+
+db.createCollection("sensor_data", {
+  timeseries: {
+    timeField: "timestamp",
+    metaField: "sensor_id",
+    granularity: "seconds"
+  }
+})
+
+db.sensor_data.insertOne({
+  sensor_id: "temp01",
+  timestamp: new Date(),
+  temperature: 25.6
+})
+
+
+
+MongoDB Atlas Search
+
+Tìm kiếm toàn văn (full-text search) với tốc độ cao, hỗ trợ tiếng Việt,
+ phân tích từ vựng, highlight, autocomplete,...
+
+ Tìm bài viết có từ “AI” trong tiêu đề:
+
+
+ db.articles.aggregate([
+  {
+    $search: {
+      index: "default",
+      text: {
+        query: "AI",
+        path: "title"
+      }
+    }
+  }
+])
+
+
+Change Data Capture (CDC)
+
+Ghi lại sự thay đổi của dữ liệu trong collection (insert/update/delete) 
+qua Change Streams, dùng trong đồng bộ dữ liệu, microservices, audit logs,…
+
+ví dụ 
+Khi có user mới đăng ký, cập nhật hệ thống marketing:
+
+const changeStream = db.collection("users").watch();
+changeStream.on("change", (change) => {
+  console.log("User changed:", change);
+  // Gửi email, cập nhật hệ thống khác,...
+});
+
+
+Client-Side Field Level Encryption (CSFLE)
+
+Mã hóa một số trường dữ liệu trên phía client, 
+MongoDB server không thể đọc được nội dung (zero trust). Đáp ứng HIPAA, GDPR,...
+
+
+Mã hóa số CCCD của bệnh nhân:
+
+  "full_name": "Nguyen Van A",
+  "ssn": {
+    "$binary": {
+      "base64": "aGVsbG9tb25nby4uLg==",
+      "subType": "06"
+    }
+  }
+}
+
+Dùng thư viện CSFLE driver để mã hóa/giải mã tự động. Server không thể thấy giá trị gốc.
